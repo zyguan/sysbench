@@ -87,6 +87,9 @@ static sb_arg_t mysql_drv_args[] =
   SB_OPT("mysql-dry-run", "Dry run, pretend that all MySQL client API "
          "calls are successful without executing them", "off", BOOL),
 
+  SB_OPT("mysql-read-timeout", "The timeout in seconds for each attempt to read from the server", "0", INT),
+  SB_OPT("mysql-write-timeout", "The timeout in seconds for each attempt to write to the server", "0", INT),
+
   SB_OPT_END
 };
 
@@ -110,6 +113,8 @@ typedef struct
   unsigned char      debug;
   sb_list_t          *ignored_errors;
   unsigned int       dry_run;
+  unsigned int       read_timeout;
+  unsigned int       write_timeout;
 } mysql_drv_args_t;
 
 typedef struct
@@ -335,6 +340,8 @@ int mysql_drv_init(void)
   args.ignored_errors = sb_get_value_list("mysql-ignore-errors");
 
   args.dry_run = sb_get_value_flag("mysql-dry-run");
+  args.read_timeout = sb_get_value_int("mysql-read-timeout");
+  args.write_timeout = sb_get_value_int("mysql-write-timeout");
 
   use_ps = 0;
   mysql_drv_caps.prepared_statements = 1;
@@ -405,7 +412,14 @@ static int mysql_drv_real_connect(db_mysql_conn_t *db_mysql_con)
     DEBUG("mysql_options(%p, %s, %s)",con, "MYSQL_OPT_COMPRESS", "NULL");
     mysql_options(con, MYSQL_OPT_COMPRESS, NULL);
   }
-
+  if (args.read_timeout > 0)
+  {
+    mysql_options(con, MYSQL_OPT_READ_TIMEOUT, &args.read_timeout);
+  }
+  if (args.write_timeout > 0)
+  {
+    mysql_options(con, MYSQL_OPT_WRITE_TIMEOUT, &args.write_timeout);
+  }
   DEBUG("mysql_real_connect(%p, \"%s\", \"%s\", \"%s\", \"%s\", %u, \"%s\", %s)",
         con,
         SAFESTR(db_mysql_con->host),
