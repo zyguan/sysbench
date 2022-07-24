@@ -61,6 +61,8 @@ sysbench.cmdline.options = {
        "client-generated IDs", true},
    create_table_options =
       {"Extra CREATE TABLE options", ""},
+   primary_key_options =
+      {"(only for TiDB) Extra PRIMAEY KEY options: NONCLUSTERED , CLUSTERED", ""},
    skip_trx =
       {"Don't start explicit transactions and execute all queries " ..
           "in the AUTOCOMMIT mode", false},
@@ -169,9 +171,9 @@ function create_table(drv, con, table_num)
    if drv:name() == "mysql"
    then
       if sysbench.opt.auto_inc then
-         id_def = "INTEGER NOT NULL AUTO_INCREMENT"
+         id_def = "BIGINT UNSIGNED NOT NULL AUTO_INCREMENT"
       else
-         id_def = "INTEGER NOT NULL"
+         id_def = "BIGINT UNSIGNED NOT NULL"
       end
       engine_def = "/*! ENGINE = " .. sysbench.opt.mysql_storage_engine .. " */"
    elseif drv:name() == "pgsql"
@@ -195,12 +197,21 @@ CREATE TABLE sbtest%d(
   k INTEGER DEFAULT '0' NOT NULL,
   c CHAR(120) DEFAULT '' NOT NULL,
   pad CHAR(60) DEFAULT '' NOT NULL,
-  %s (id)
+  %s (id) %s
 ) %s %s]],
-      table_num, id_def, id_index_def, engine_def,
+      table_num, id_def, id_index_def,
+      sysbench.opt.primary_key_options,
+      engine_def,
       sysbench.opt.create_table_options)
 
    con:query(query)
+
+   if sysbench.opt.create_secondary then
+      print(string.format("Creating a secondary index on 'sbtest%d'...",
+                          table_num))
+      con:query(string.format("CREATE INDEX k_%d ON sbtest%d(k)",
+                              table_num, table_num))
+   end
 
    if (sysbench.opt.table_size > 0) then
       print(string.format("Inserting %d records into 'sbtest%d'",
@@ -238,13 +249,6 @@ CREATE TABLE sbtest%d(
    end
 
    con:bulk_insert_done()
-
-   if sysbench.opt.create_secondary then
-      print(string.format("Creating a secondary index on 'sbtest%d'...",
-                          table_num))
-      con:query(string.format("CREATE INDEX k_%d ON sbtest%d(k)",
-                              table_num, table_num))
-   end
 end
 
 local t = sysbench.sql.type
