@@ -182,7 +182,8 @@ typedef struct
   int             error CK_CC_CACHELINE;        /* global error flag */
   int             argc;         /* command line arguments count */
   char            **argv;      /* command line arguments */
-  unsigned int    tx_rate;      /* target transaction rate */
+  unsigned int    tx_rate;        /* target transaction rate */
+  unsigned char   allow_low_rate; /* allow low transaction rate */
   uint64_t        max_events;   /* maximum number of events to execute */
   uint64_t        max_time_ns;  /* total execution time limit */
   pthread_mutex_t exec_mutex CK_CC_CACHELINE;   /* execution mutex */

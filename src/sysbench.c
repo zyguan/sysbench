@@ -82,6 +82,9 @@
 /* Maximum queue length for the tx-rate mode. Must be a power of 2 */
 #define MAX_QUEUE_LEN 131072
 
+/* Maximum backoff time for enqueuing. */
+#define MAX_ENQUEUE_BACKOFF_NS 300000000
+
 /*
   Extra thread ID assigned to background threads. This may be used as an index
   into per-thread arrays (see comment in sb_alloc_per_thread_array().
@@ -103,6 +106,7 @@ sb_arg_t general_args[] =
   SB_OPT("thread-stack-size", "size of stack per thread", "64K", SIZE),
   SB_OPT("thread-init-timeout", "wait time in seconds for worker threads to initialize", "30", INT),
   SB_OPT("rate", "average transactions rate. 0 for unlimited rate", "0", INT),
+  SB_OPT("allow-low-rate", "allow transactions rate to be lower than specified with --rate", "off", BOOL),
   SB_OPT("report-interval", "periodically report intermediate statistics with "
          "a specified interval in seconds. 0 disables intermediate reports",
          "0", INT),
@@ -890,10 +894,16 @@ static void *eventgen_thread_proc(void *arg)
   uint64_t intr_ns = sb_rand_exp(lambda);
   uint64_t next_ns = curr_ns + intr_ns;
 
-  for (int i = 0; ; i = (i+1) % MAX_QUEUE_LEN)
+  uint64_t backoff_count = 0;
+  int i = 0;
+  while (true)
   {
     curr_ns = sb_timer_value(&sb_exec_timer);
-    intr_ns = sb_rand_exp(lambda);
+    if (backoff_count == 0) {
+      intr_ns = sb_rand_exp(lambda);
+    } else {
+      intr_ns = SB_MIN(lambda * backoff_count, MAX_ENQUEUE_BACKOFF_NS);
+    }
     next_ns += intr_ns;
 
     if (sb_globals.max_time_ns > 0 &&
@@ -912,6 +922,10 @@ static void *eventgen_thread_proc(void *arg)
     if (ck_ring_enqueue_spmc(&queue_ring, queue_ring_buffer,
                              &queue_array[i]) == false)
     {
+      if (sb_globals.allow_low_rate) {
+        backoff_count++;
+        continue;
+      }
       sb_globals.error = 1;
       log_text(LOG_FATAL,
                "The event queue is full. This means the worker threads are "
@@ -922,6 +936,9 @@ static void *eventgen_thread_proc(void *arg)
 
     /* Wake up one waiting thread, if there are any */
     pthread_cond_signal(&queue_cond);
+
+    backoff_count = 0;
+    i = (i+1) % MAX_QUEUE_LEN;
   }
 
   return NULL;
@@ -1382,6 +1399,7 @@ static int init(void)
   }
 
   sb_globals.tx_rate = sb_get_value_int("rate");
+  sb_globals.allow_low_rate = sb_get_value_flag("allow-low-rate");
 
   sb_globals.report_interval = sb_get_value_int("report-interval");
 
