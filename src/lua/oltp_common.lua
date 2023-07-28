@@ -248,7 +248,7 @@ CREATE TABLE sbtest%d(
 end
 
 local t = sysbench.sql.type
-local stmt_defs = {
+stmt_defs = {
    point_selects = {
       "SELECT c FROM sbtest%u WHERE id=?",
       t.INT},
@@ -400,11 +400,11 @@ function cleanup()
    end
 end
 
-local function get_table_num()
+function get_table_num()
    return sysbench.rand.uniform(1, sysbench.opt.tables)
 end
 
-local function get_id()
+function get_id()
    return sysbench.rand.default(1, sysbench.opt.table_size)
 end
 
