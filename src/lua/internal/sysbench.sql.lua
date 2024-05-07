@@ -148,6 +148,7 @@ int db_bind_param(sql_statement *stmt, sql_bind *params, size_t len);
 int db_bind_result(sql_statement *stmt, sql_bind *results, size_t len);
 sql_result *db_execute(sql_statement *stmt);
 sql_result *db_stmt_next_result(sql_statement *stmt);
+int db_stmt_fetch(sql_result *rs);
 int db_close(sql_statement *stmt);
 
 bool db_more_results(sql_connection *con);
@@ -231,7 +232,7 @@ function connection_methods.check_error(self, rs, query)
    end
 
    if self.sql_state == nil or self.sql_errmsg == nil then
-      -- It must be an API error, don't bother trying to downgrade it an
+      -- It must be an API error, do not bother trying to downgrade it an
       -- ignorable error
       error("SQL API error", 3)
    end
@@ -328,9 +329,35 @@ local connection_mt = {
 }
 ffi.metatype("sql_connection", connection_mt)
 
--- sql_param
-local sql_param = {}
-function sql_param.set(self, value)
+-- sql_bind
+local sql_bind = {}
+
+function sql_bind.get(self)
+   local sql_type = sysbench.sql.type
+   local btype = self.type
+
+   if self.is_null[0] ~= 0 then
+      return nil
+   end
+
+   if btype == sql_type.TINYINT or
+      btype == sql_type.SMALLINT or
+      btype == sql_type.INT or
+      btype == sql_type.BIGINT or
+      btype == sql_type.FLOAT or
+      btype == sql_type.DOUBLE
+   then
+      return tonumber(self.buffer[0])
+   elseif btype == sql_type.CHAR or
+      btype == sql_type.VARCHAR
+   then
+      return ffi.string(self.buffer, self.data_len[0])
+   else
+      error("Unsupported bind type: " .. btype, 2)
+   end
+end
+
+function sql_bind.set(self, value)
    local sql_type = sysbench.sql.type
    local btype = self.type
 
@@ -357,11 +384,11 @@ function sql_param.set(self, value)
       ffi.copy(self.buffer, value, len)
       self.data_len[0] = len
    else
-      error("Unsupported argument type: " .. btype, 2)
+      error("Unsupported bind type: " .. btype, 2)
    end
 end
 
-function sql_param.set_rand_str(self, fmt)
+function sql_bind.set_rand_str(self, fmt)
    local sql_type = sysbench.sql.type
    local btype = self.type
 
@@ -379,8 +406,8 @@ function sql_param.set_rand_str(self, fmt)
    end
 end
 
-sql_param.__index = sql_param
-sql_param.__tostring = function () return '<sql_param>' end
+sql_bind.__index = sql_bind
+sql_bind.__tostring = function () return '<sql_bind>' end
 
 -- sql_statement methods
 local statement_methods = {}
@@ -388,36 +415,36 @@ local statement_methods = {}
 function statement_methods.bind_create(self, btype, max_len)
    local sql_type = sysbench.sql.type
 
-   local param = setmetatable({}, sql_param)
+   local bind = setmetatable({}, sql_bind)
 
    if btype == sql_type.TINYINT or
       btype == sql_type.SMALLINT or
       btype == sql_type.INT or
       btype == sql_type.BIGINT
    then
-      param.type = sql_type.BIGINT
-      param.buffer = ffi.new('int64_t[1]')
-      param.max_len = 8
+      bind.type = sql_type.BIGINT
+      bind.buffer = ffi.new('int64_t[1]')
+      bind.max_len = 8
    elseif btype == sql_type.FLOAT or
       btype == sql_type.DOUBLE
    then
-      param.type = sql_type.DOUBLE
-      param.buffer = ffi.new('double[1]')
-      param.max_len = 8
+      bind.type = sql_type.DOUBLE
+      bind.buffer = ffi.new('double[1]')
+      bind.max_len = 8
    elseif btype == sql_type.CHAR or
       btype == sql_type.VARCHAR
    then
-      param.type = sql_type.VARCHAR
-      param.buffer = ffi.new('char[?]', max_len)
-      param.max_len = max_len
+      bind.type = sql_type.VARCHAR
+      bind.buffer = ffi.new('char[?]', max_len)
+      bind.max_len = max_len
    else
       error("Unsupported argument type: " .. btype, 2)
    end
 
-   param.data_len = ffi.new('unsigned long[1]')
-   param.is_null = ffi.new('char[1]')
+   bind.data_len = ffi.new('unsigned long[1]')
+   bind.is_null = ffi.new('char[1]')
 
-   return param
+   return bind
 end
 
 function statement_methods.bind_param(self, ...)
@@ -426,14 +453,30 @@ function statement_methods.bind_param(self, ...)
 
    local binds = ffi.new("sql_bind[?]", len)
 
-   for i, param in ipairs({...}) do
-      binds[i-1].type = param.type
-      binds[i-1].buffer = param.buffer
-      binds[i-1].data_len = param.data_len
-      binds[i-1].max_len = param.max_len
-      binds[i-1].is_null = param.is_null
+   for i, bind in ipairs({...}) do
+      binds[i-1].type = bind.type
+      binds[i-1].buffer = bind.buffer
+      binds[i-1].data_len = bind.data_len
+      binds[i-1].max_len = bind.max_len
+      binds[i-1].is_null = bind.is_null
    end
    return ffi.C.db_bind_param(self, binds, len)
+end
+
+function statement_methods.bind_result(self, ...)
+   local len = select('#', ...)
+   if len  < 1 then return nil end
+
+   local binds = ffi.new("sql_bind[?]", len)
+
+   for i, bind in ipairs({...}) do
+      binds[i-1].type = bind.type
+      binds[i-1].buffer = bind.buffer
+      binds[i-1].data_len = bind.data_len
+      binds[i-1].max_len = bind.max_len
+      binds[i-1].is_null = bind.is_null
+   end
+   return ffi.C.db_bind_result(self, binds, len)
 end
 
 function statement_methods.execute(self)
@@ -485,6 +528,10 @@ function result_methods.fetch_row(self)
    end
 
    return res
+end
+
+function result_methods.fetch(self)
+   return assert(ffi.C.db_stmt_fetch(self) == 0, "db_stmt_fetch() failed")
 end
 
 function result_methods.free(self)

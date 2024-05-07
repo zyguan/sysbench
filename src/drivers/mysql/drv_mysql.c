@@ -1101,19 +1101,19 @@ db_error_t mysql_drv_query(db_conn_t *sb_conn, const char *query, size_t len,
   return DB_ERROR_NONE;
 }
 
-
 /* Fetch row from result set of a prepared statement */
-
 
 int mysql_drv_fetch(db_result_t *rs)
 {
-  /* NYI */
-  (void)rs;  /* unused */
-
   if (args.dry_run)
     return DB_ERROR_NONE;
 
-  return 1;
+  int err = mysql_stmt_fetch(rs->statement->ptr);
+  DEBUG("mysql_stmt_fetch(%p) = %d", rs->statement->ptr, err);
+  if (err)
+    return DB_ERROR_IGNORABLE;
+
+  return DB_ERROR_NONE;
 }
 
 /* Fetch row from result set of a query */

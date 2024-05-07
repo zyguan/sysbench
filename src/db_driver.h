@@ -262,7 +262,7 @@ typedef struct db_stmt
   char            *query;          /* Query string for emulated PS */
   db_bind_t       *bound_param;    /* Array of bound parameters for emulated PS */
   unsigned int    bound_param_len; /* Length of the bound_param array */
-  db_bind_t       *bound_res;      /* Array of bound results for emulated PS */ 
+  db_bind_t       *bound_res;      /* Array of bound results for emulated PS */
   db_bind_t       *bound_res_len;  /* Length of the bound_res array */
   char            emulated;        /* Should this statement be emulated? */
   void            *ptr;            /* Pointer to driver-specific data structure */
@@ -299,6 +299,8 @@ int db_bind_result(db_stmt_t *, db_bind_t *, size_t);
 db_result_t *db_execute(db_stmt_t *);
 
 db_result_t *db_stmt_next_result(db_stmt_t *);
+
+int db_stmt_fetch(db_result_t *);
 
 db_row_t *db_fetch_row(db_result_t *);
 

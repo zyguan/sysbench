@@ -131,7 +131,7 @@ void db_print_help(void)
   log_text(LOG_NOTICE, "General database options:\n");
   sb_print_options(db_args);
   log_text(LOG_NOTICE, "");
-  
+
   log_text(LOG_NOTICE, "Compiled-in database drivers:");
   SB_LIST_FOR_EACH(pos, &drivers)
   {
@@ -550,6 +550,42 @@ db_result_t *db_stmt_next_result(db_stmt_t *stmt)
   return NULL;
 }
 
+/* Fetch row from result set of a prepared statement */
+
+int db_stmt_fetch(db_result_t *rs)
+{
+  db_conn_t *con = SB_CONTAINER_OF(rs, db_conn_t, rs);
+
+  if (con->state == DB_CONN_INVALID)
+  {
+    log_text(LOG_ALERT, "attempt to use an already closed connection");
+    return 1;
+  }
+  else if (con->state != DB_CONN_RESULT_SET)
+  {
+    log_text(LOG_ALERT, "attempt to fetch row from an invalid result set");
+    return 1;
+  }
+
+  if (con->driver->ops.fetch == NULL)
+  {
+    log_text(LOG_ALERT, "fetching rows is not supported by the driver");
+    return 1;
+  }
+
+  if (rs->nrows == 0 || rs->nfields == 0)
+  {
+    log_text(LOG_ALERT, "attempt to fetch row from an empty result set");
+    return 1;
+  }
+
+  if (con->driver->ops.fetch(rs))
+  {
+    return 1;
+  }
+
+  return 0;
+}
 
 /* Fetch row from result set of a query */
 
@@ -841,7 +877,7 @@ int db_parse_arguments(void)
   db_globals.driver = sb_get_value_string("db-driver");
 
   db_globals.debug = sb_get_value_flag("db-debug");
-  
+
   return 0;
 }
 
@@ -859,7 +895,7 @@ int db_print_value(db_bind_t *var, char *buf, int buflen)
     n = snprintf(buf, buflen, "NULL");
     return (n < buflen) ? n : -1;
   }
-  
+
   switch (var->type) {
     case DB_TYPE_TINYINT:
       n = snprintf(buf, buflen, "%hhd", *(char *)var->buffer);
@@ -955,7 +991,7 @@ int db_bulk_insert_init(db_conn_t *con, const char *query, size_t query_len)
   con->bulk_buffer = (char *)malloc(con->bulk_buflen);
   if (con->bulk_buffer == NULL)
     return 1;
-  
+
   con->bulk_commit_max = driver_caps.needs_commit ? ROWS_BEFORE_COMMIT : 0;
   con->bulk_commit_cnt = 0;
   strcpy(con->bulk_buffer, query);
