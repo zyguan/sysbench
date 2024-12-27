@@ -183,7 +183,6 @@ typedef struct
   int             argc;         /* command line arguments count */
   char            **argv;      /* command line arguments */
   unsigned int    tx_rate;        /* target transaction rate */
-  unsigned char   allow_low_rate; /* allow low transaction rate */
   uint64_t        max_events;   /* maximum number of events to execute */
   uint64_t        max_time_ns;  /* total execution time limit */
   pthread_mutex_t exec_mutex CK_CC_CACHELINE;   /* execution mutex */
@@ -194,12 +193,12 @@ typedef struct
   unsigned int    report_interval;  /* intermediate reports interval */
   unsigned int    percentile;   /* percentile rank for latency stats */
   unsigned int    histogram;    /* show histogram in latency stats */
-  unsigned char   ignore_queue_time; /* ignore queue time in latency stats */
-  /* array of report checkpoints */
-  unsigned int    checkpoints[MAX_CHECKPOINTS];
+  unsigned int    checkpoints[MAX_CHECKPOINTS]; /* array of report checkpoints */
   unsigned int    n_checkpoints; /* number of checkpoints */
-  unsigned char   debug;        /* debug flag */
   unsigned int    timeout;      /* forced shutdown timeout */
+  unsigned char   debug;        /* debug flag */
+  unsigned char   ignore_queue_full; /* ignore error of queue full */
+  unsigned char   ignore_queue_time; /* ignore queue time in latency stats */
   unsigned char   validate;     /* validation flag */
   unsigned char   verbosity CK_CC_CACHELINE;    /* log verbosity */
   int             concurrency CK_CC_CACHELINE;  /* number of concurrent requests

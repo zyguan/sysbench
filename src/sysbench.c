@@ -106,7 +106,8 @@ sb_arg_t general_args[] =
   SB_OPT("thread-stack-size", "size of stack per thread", "64K", SIZE),
   SB_OPT("thread-init-timeout", "wait time in seconds for worker threads to initialize", "30", INT),
   SB_OPT("rate", "average transactions rate. 0 for unlimited rate", "0", INT),
-  SB_OPT("allow-low-rate", "allow transactions rate to be lower than specified with --rate", "off", BOOL),
+  SB_OPT("ignore-queue-full", "do backoff wait and retry when queue is full", "off", BOOL),
+  SB_OPT("ignore-queue-time", "ignore queue time in latency statistics", "off", BOOL),
   SB_OPT("report-interval", "periodically report intermediate statistics with "
          "a specified interval in seconds. 0 disables intermediate reports",
          "0", INT),
@@ -923,7 +924,7 @@ static void *eventgen_thread_proc(void *arg)
     if (ck_ring_enqueue_spmc(&queue_ring, queue_ring_buffer,
                              &queue_array[i]) == false)
     {
-      if (sb_globals.allow_low_rate) {
+      if (sb_globals.ignore_queue_full) {
         backoff_count++;
         continue;
       }
@@ -1400,7 +1401,8 @@ static int init(void)
   }
 
   sb_globals.tx_rate = sb_get_value_int("rate");
-  sb_globals.allow_low_rate = sb_get_value_flag("allow-low-rate");
+  sb_globals.ignore_queue_full = sb_get_value_flag("ignore-queue-full");
+  sb_globals.ignore_queue_time = sb_get_value_flag("ignore-queue-time");
 
   sb_globals.report_interval = sb_get_value_int("report-interval");
 
