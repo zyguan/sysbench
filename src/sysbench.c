@@ -740,8 +740,9 @@ bool sb_more_events(int thread_id)
 
     ck_pr_inc_int(&sb_globals.concurrency);
 
-    timers[thread_id].queue_time = sb_timer_value(&sb_exec_timer) -
-      ((uint64_t *) ptr)[0];
+    if (!sb_globals.ignore_queue_time)
+      timers[thread_id].queue_time = sb_timer_value(&sb_exec_timer) -
+        ((uint64_t *) ptr)[0];
   }
 
   return true;

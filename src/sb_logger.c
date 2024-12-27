@@ -98,6 +98,7 @@ static sb_arg_t oper_handler_args[] =
          "Use the special value of 0 to disable percentile calculations",
          "95", INT),
   SB_OPT("histogram", "print latency histogram in report", "off", BOOL),
+  SB_OPT("ignore-queue-time", "ignore queue time in latency statistics", "off", BOOL),
 
   SB_OPT_END
 };
@@ -475,6 +476,7 @@ int oper_handler_init(void)
   sb_globals.percentile = tmp;
 
   sb_globals.histogram = sb_get_value_flag("histogram");
+  sb_globals.ignore_queue_time = sb_get_value_flag("ignore-queue-time");
   if (sb_globals.percentile == 0 && sb_globals.histogram != 0)
   {
     log_text(LOG_FATAL, "--histogram cannot be used with --percentile=0");

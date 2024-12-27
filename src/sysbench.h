@@ -194,6 +194,7 @@ typedef struct
   unsigned int    report_interval;  /* intermediate reports interval */
   unsigned int    percentile;   /* percentile rank for latency stats */
   unsigned int    histogram;    /* show histogram in latency stats */
+  unsigned char   ignore_queue_time; /* ignore queue time in latency stats */
   /* array of report checkpoints */
   unsigned int    checkpoints[MAX_CHECKPOINTS];
   unsigned int    n_checkpoints; /* number of checkpoints */
