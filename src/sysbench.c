@@ -32,7 +32,7 @@
 # include <strings.h>
 #endif
 
-#ifdef HAVE_UNISTD_H 
+#ifdef HAVE_UNISTD_H
 # include <unistd.h>
 # include <sys/types.h>
 #endif
@@ -79,8 +79,8 @@
 
 #define VERSION_STRING PACKAGE" "PACKAGE_VERSION SB_GIT_SHA
 
-/* Maximum queue length for the tx-rate mode. Must be a power of 2 */
-#define MAX_QUEUE_LEN 131072
+/* Default queue length for the tx-rate mode. Must be a power of 2. */
+#define DEFAULT_QUEUE_LEN 131072
 
 /* Maximum backoff time for enqueuing. */
 #define MAX_ENQUEUE_BACKOFF_NS 300000000
@@ -106,6 +106,7 @@ sb_arg_t general_args[] =
   SB_OPT("thread-stack-size", "size of stack per thread", "64K", SIZE),
   SB_OPT("thread-init-timeout", "wait time in seconds for worker threads to initialize", "30", INT),
   SB_OPT("rate", "average transactions rate. 0 for unlimited rate", "0", INT),
+  SB_OPT("queue-length", "event queue length for rate-limited mode (power of 2)", "131072", INT),
   SB_OPT("ignore-queue-full", "do backoff wait and retry when queue is full", "off", BOOL),
   SB_OPT("ignore-queue-time", "ignore queue time in latency statistics", "off", BOOL),
   SB_OPT("report-interval", "periodically report intermediate statistics with "
@@ -147,8 +148,8 @@ static sb_barrier_t report_barrier;
 /* structures to handle queue of events, needed for tx_rate mode */
 static pthread_mutex_t    queue_mutex;
 static pthread_cond_t     queue_cond;
-static uint64_t           queue_array[MAX_QUEUE_LEN] CK_CC_CACHELINE;
-static ck_ring_buffer_t   queue_ring_buffer[MAX_QUEUE_LEN] CK_CC_CACHELINE;
+static uint64_t           *queue_array;
+static ck_ring_buffer_t   *queue_ring_buffer;
 static ck_ring_t          queue_ring CK_CC_CACHELINE;
 
 static int report_thread_created CK_CC_CACHELINE;
@@ -173,6 +174,47 @@ TLS int sb_tls_thread_id;
 static void print_header(void);
 static void print_help(void);
 static void print_run_mode(sb_test_t *);
+static int queue_storage_init(void);
+static void queue_storage_done(void);
+
+static bool is_power_of_two(unsigned int value)
+{
+  return value != 0 && (value & (value - 1)) == 0;
+}
+
+static int queue_storage_init(void)
+{
+  const size_t queue_size = sb_globals.queue_length;
+  const size_t array_bytes = queue_size * sizeof(*queue_array);
+  const size_t ring_bytes = queue_size * sizeof(*queue_ring_buffer);
+
+  if (sb_globals.tx_rate == 0)
+    return 0;
+
+  queue_array = sb_memalign(array_bytes, CK_MD_CACHELINE);
+  queue_ring_buffer = sb_memalign(ring_bytes, CK_MD_CACHELINE);
+
+  if (queue_array == NULL || queue_ring_buffer == NULL)
+  {
+    queue_storage_done();
+    log_text(LOG_FATAL, "Memory allocation failure");
+    return 1;
+  }
+
+  memset(queue_array, 0, array_bytes);
+  memset(queue_ring_buffer, 0, ring_bytes);
+
+  return 0;
+}
+
+static void queue_storage_done(void)
+{
+  free(queue_array);
+  free(queue_ring_buffer);
+
+  queue_array = NULL;
+  queue_ring_buffer = NULL;
+}
 
 #ifdef HAVE_ALARM
 static void sigalrm_thread_init_timeout_handler(int sig)
@@ -476,7 +518,7 @@ void print_help(void)
 {
   sb_list_item_t *pos;
   sb_test_t      *test;
-  
+
   printf("Usage:\n");
   printf("  sysbench [options]... [testname] [command]\n\n");
   printf("Commands implemented by most tests: prepare run cleanup help\n\n");
@@ -662,7 +704,7 @@ void print_run_mode(sb_test_t *test)
 
   if (sb_globals.debug)
     log_text(LOG_NOTICE, "Debug mode enabled.\n");
-  
+
   if (sb_globals.validate)
     log_text(LOG_NOTICE, "Validation checks: on.\n");
 
@@ -683,7 +725,7 @@ void print_run_mode(sb_test_t *test)
   if (sb_globals.force_shutdown)
     log_text(LOG_NOTICE, "Forcing shutdown in %u seconds",
              (unsigned) NS2SEC(sb_globals.max_time_ns) + sb_globals.timeout);
-  
+
   log_text(LOG_NOTICE, "");
 
   if (test->ops.print_mode != NULL)
@@ -869,7 +911,7 @@ static void *eventgen_thread_proc(void *arg)
   /* Initialize thread-local RNG state */
   sb_rand_thread_init();
 
-  ck_ring_init(&queue_ring, MAX_QUEUE_LEN);
+  ck_ring_init(&queue_ring, sb_globals.queue_length);
 
   if (pthread_mutex_init(&queue_mutex, NULL) ||
       pthread_cond_init(&queue_cond, NULL))
@@ -897,7 +939,7 @@ static void *eventgen_thread_proc(void *arg)
   uint64_t next_ns = curr_ns + intr_ns;
 
   uint64_t backoff_count = 0;
-  int i = 0;
+  unsigned int i = 0;
   while (true)
   {
     curr_ns = sb_timer_value(&sb_exec_timer);
@@ -940,7 +982,7 @@ static void *eventgen_thread_proc(void *arg)
     pthread_cond_signal(&queue_cond);
 
     backoff_count = 0;
-    i = (i+1) % MAX_QUEUE_LEN;
+    i = (i + 1) % sb_globals.queue_length;
   }
 
   return NULL;
@@ -1085,7 +1127,7 @@ static int run_test(sb_test_t *test)
   /* initialize test */
   if (test->ops.init != NULL && test->ops.init() != 0)
     return 1;
-  
+
   /* print test mode */
   print_run_mode(test);
 
@@ -1096,6 +1138,9 @@ static int run_test(sb_test_t *test)
 
   /* prepare test */
   if (test->ops.prepare != NULL && test->ops.prepare() != 0)
+    return 1;
+
+  if (queue_storage_init())
     return 1;
 
   pthread_mutex_init(&sb_globals.exec_mutex, NULL);
@@ -1320,7 +1365,7 @@ static int init(void)
   sb_globals.threads = sb_get_value_int("threads");
 
   thread_init_timeout = sb_get_value_int("thread-init-timeout");
-  
+
   if (sb_globals.threads <= 0)
   {
     log_text(LOG_FATAL, "Invalid value for --threads: %d.\n",
@@ -1364,7 +1409,7 @@ static int init(void)
     else if (strcasecmp(tmp, "off"))
     {
       char *endptr;
-    
+
       sb_globals.force_shutdown = 1;
       sb_globals.timeout = (unsigned) strtol(tmp, &endptr, 10);
       if (*endptr == '%')
@@ -1392,7 +1437,7 @@ static int init(void)
     if (opt != NULL)
       set_option(opt->name, "5", opt->type);
   }
-  
+
   sb_globals.validate = sb_get_value_flag("validate");
 
   if (sb_rand_init())
@@ -1401,6 +1446,16 @@ static int init(void)
   }
 
   sb_globals.tx_rate = sb_get_value_int("rate");
+  int queue_length = sb_get_value_int("queue-length");
+
+  if (queue_length < 2 || !is_power_of_two((unsigned int) queue_length))
+  {
+    log_text(LOG_FATAL, "Invalid value for --queue-length: %d. Must be a power of 2 and at least 2.",
+             queue_length);
+    return 1;
+  }
+
+  sb_globals.queue_length = (unsigned int) queue_length;
   sb_globals.ignore_queue_full = sb_get_value_flag("ignore-queue-full");
   sb_globals.ignore_queue_time = sb_get_value_flag("ignore-queue-time");
 
@@ -1494,7 +1549,7 @@ int main(int argc, char *argv[])
     printf("%s\n", VERSION_STRING);
     return EXIT_SUCCESS;
   }
-  
+
   /* Initialize global variables and logger */
   if (init() || log_init() || sb_counters_init())
     return EXIT_FAILURE;
@@ -1621,6 +1676,7 @@ end:
 
   free(timers);
   free(timers_copy);
+  queue_storage_done();
 
   free(sb_globals.argv);
 

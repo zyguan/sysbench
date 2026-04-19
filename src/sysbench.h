@@ -25,7 +25,7 @@
 # include <string.h>
 # include <stdbool.h>
 #endif
-#ifdef HAVE_UNISTD_H 
+#ifdef HAVE_UNISTD_H
 # include <unistd.h>
 # include <sys/types.h>
 #endif
@@ -45,7 +45,7 @@
 #include "tests/sb_mutex.h"
 
 /* Macros to control global execution mutex */
-#define SB_THREAD_MUTEX_LOCK() pthread_mutex_lock(&sb_globals.exec_mutex) 
+#define SB_THREAD_MUTEX_LOCK() pthread_mutex_lock(&sb_globals.exec_mutex)
 #define SB_THREAD_MUTEX_UNLOCK() pthread_mutex_unlock(&sb_globals.exec_mutex)
 
 /* Maximum number of elements in --report-checkpoints list */
@@ -158,7 +158,7 @@ typedef struct
   sb_op_thread_run      *thread_run;      /* main thread loop */
   sb_op_thread_done     *thread_done;     /* thread finalize function */
   sb_op_cleanup         *cleanup;         /* called after exit from thread,
-                                             but before timers stop */ 
+                                             but before timers stop */
   sb_op_done            *done;            /* finalize function */
 } sb_operations_t;
 
@@ -191,6 +191,7 @@ typedef struct
   unsigned int    threads CK_CC_CACHELINE;  /* number of threads to use */
   unsigned int    threads_running;  /* number of threads currently active */
   unsigned int    report_interval;  /* intermediate reports interval */
+  unsigned int    queue_length;     /* event queue length for tx_rate mode */
   unsigned int    percentile;   /* percentile rank for latency stats */
   unsigned int    histogram;    /* show histogram in latency stats */
   unsigned int    checkpoints[MAX_CHECKPOINTS]; /* array of report checkpoints */

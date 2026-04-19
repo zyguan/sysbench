@@ -87,7 +87,7 @@ Quick install instructions:
 
 - Fedora:
   ``` shell
-  curl -s https://packagecloud.io/install/repositories/akopytov/sysbench/script.rpm.sh | sudo bash	
+  curl -s https://packagecloud.io/install/repositories/akopytov/sysbench/script.rpm.sh | sudo bash
   sudo dnf -y install sysbench
   ```
 
@@ -173,7 +173,7 @@ Assuming you have Xcode (or Xcode Command Line Tools) and Homebrew installed:
     # For PostgreSQL support
     brew install postgresql
     # openssl is not linked by Homebrew, this is to avoid "ld: library not found for -lssl"
-    export LDFLAGS=-L/usr/local/opt/openssl/lib 
+    export LDFLAGS=-L/usr/local/opt/openssl/lib
 ```
 
 ## Build and Install
@@ -201,7 +201,7 @@ but other benchmarks will be functional.
 
 The general command line syntax for sysbench is:
 
-		  sysbench [options]... [testname] [command] 
+		  sysbench [options]... [testname] [command]
 
 - *testname* is an optional name of a built-in test (e.g. `fileio`,
   `memory`, `cpu`, etc.), or a name of one of the bundled Lua scripts
@@ -254,6 +254,7 @@ The table below lists the supported common options, their descriptions and defau
 | `--time`              | Limit for total execution time in seconds. 0 means no limit                                                                                                                                                                                                                                                                                                                                                                                                             | 10              |
 | `--warmup-time`       | Execute events for this many seconds with statistics disabled before the actual benchmark run with statistics enabled. This is useful when you want to exclude the initial period of a benchmark run from statistics. In many benchmarks, the initial period is not representative because CPU/database/page and other caches need some time to warm up                                                                                                                                                                                                                                                                                                  | 0               |
 | `--rate`              | Average transactions rate. The number specifies how many events (transactions) per seconds should be executed by all threads on average. 0 (default) means unlimited rate, i.e. events are executed as fast as possible                                                                                                                                                                                                                                                                 | 0               |
+| `--queue-length`      | Event queue length for rate-limited mode. This option only takes effect when `--rate` is greater than 0, and the value must be a power of 2                                                                                                                                                                                                                                                                                                                                 | 131072          |
 | `--thread-init-timeout` | Wait time in seconds for worker threads to initialize                                                                                                                                                                                                                                                                                                                                                                                                                  | 30              |
 | `--thread-stack-size` | Size of stack for each thread                                                                                                                                                                                                                                                                                                                                                                                                                                           | 32K             |
 | `--report-interval`   | Periodically report intermediate statistics with a specified interval in seconds. Note that statistics produced by this option is per-interval rather than cumulative. 0 disables intermediate reports                                                                                                                                                                                                                                                                  | 0               |
